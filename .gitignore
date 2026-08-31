@@ -1,0 +1,9 @@
+# build
+/target
+
+# env
+.env
+
+# editor
+.idea
+.RestfulApiTool

@@ -1,0 +1,34 @@
+impl TryFrom<GameRow> for Game {
+    type Error = RepositoryError;
+
+    fn try_from(row: GameRow) -> Result<Self, Self::Error> {
+        let GameRow {
+            id,
+            status,
+            state,
+            maximum_players,
+            created_at,
+        } = row;
+
+        let status = match status.as_str() {
+            "open" => GameStatus::Open,
+            "running" => GameStatus::Running,
+            "closed" => GameStatus::Closed,
+            _ => return Err(RepositoryError::invalid_data(status)),
+        };
+
+        let state = serde_json::from_value(state).map_err(RepositoryError::invalid_data)?;
+
+        let maximum_players =
+            usize::try_from(maximum_players).map_err(RepositoryError::invalid_data)?;
+
+        Game::restore(
+            GameId::from_uuid(id),
+            status,
+            state,
+            maximum_players,
+            created_at,
+        )
+        .map_err(RepositoryError::invalid_data)
+    }
+}
