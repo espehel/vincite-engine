@@ -11,9 +11,6 @@ pub enum AppError {
     #[error("game was not found")]
     NotFound,
 
-    #[error("game already exists")]
-    AlreadyExists,
-
     #[error("game was modified concurrently")]
     Conflict,
 
@@ -45,7 +42,6 @@ impl AppError {
     fn public(&self) -> (StatusCode, &'static str) {
         match self {
             Self::NotFound => (StatusCode::NOT_FOUND, "game was not found"),
-            Self::AlreadyExists => (StatusCode::CONFLICT, "game already exists"),
             Self::Conflict => (StatusCode::CONFLICT, "game was modified concurrently"),
             Self::InvalidData { .. } | Self::InvalidState { .. } | Self::Unexpected { .. } => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal server error")

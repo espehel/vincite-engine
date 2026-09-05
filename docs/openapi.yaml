@@ -1,0 +1,322 @@
+openapi: "3.1.0"
+info:
+  title: Vincite Game API
+  version: "0.1.0"
+  description: |
+    HTTP API for the Vincite game server.
+
+    This document covers **`POST /games`**, **`GET /games`** and **`GET /games/{id}`**
+    (handlers `post_games`, `get_games`, `get_game` in `src/api/router.rs`).
+    `GET /games/{game_id}/players/{player_id}` is still a stub handler returning
+    `text/plain` and is intentionally not documented here.
+
+    Notes on behavior verified against a running server:
+
+    - Paths have **no trailing slash**. `GET /games/` returns an empty `404` — axum does
+      not redirect between `/games` and `/games/`.
+    - Requesting a documented path with an undeclared method returns `405` with an
+      `Allow` header (e.g. `POST /games/{id}` → `405`, `Allow: GET,HEAD`). This is axum's
+      built-in behavior and is not repeated on each operation.
+    - Error bodies are JSON (`Error` schema) when produced by `AppError`, but
+      **`text/plain`** when produced by an axum extractor rejection.
+
+    The service defines no authentication layer, so no `securitySchemes` are declared.
+    Extracted by hand from the axum router, DTOs and `AppError`; it will drift unless
+    regenerated when those change.
+  contact:
+    name: Vincite
+    email: espen@noteless.no
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local development (from `TcpListener::bind("127.0.0.1:8080")` in src/main.rs)
+tags:
+  - name: Games
+    description: Create and inspect games.
+paths:
+  /games:
+    get:
+      summary: List games
+      description: |
+        Returns every game in the store. There is no pagination, ordering or limit — the
+        handler issues an unfiltered `SELECT` and maps each row into the response.
+
+        The `status` query parameter is **accepted but ignored**: `get_games` binds
+        `Query<GameFilter>` and then calls `db::find_games(&pool)`, which takes no filter.
+        It is also typed `Option<u32>` while game statuses are strings, so the only values
+        it accepts are integers that correspond to no status — see the parameter
+        description.
+      operationId: getGames
+      tags: [Games]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: >-
+            Non-functional. Deserialized into `GameFilter.status: Option<u32>` and then
+            never read, so it has no effect on the result. Supplying a status name such as
+            `?status=open` fails query deserialization and returns `400`; only an integer
+            is accepted, and it is discarded.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            maximum: 4294967295
+          example: 1
+      responses:
+        "200":
+          description: >-
+            All games. Returns `200` with an empty `games` array when the table is empty —
+            never `404`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetGamesResponse"
+              example:
+                games:
+                  - id: 123e4567-e89b-12d3-a456-426614174000
+                    status: Open
+                  - id: 7f1d3c92-4b6a-4e21-9c8d-0a2b5e6f7c31
+                    status: Running
+        "400":
+          $ref: "#/components/responses/InvalidQueryString"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      summary: Create a game
+      description: |
+        Initiates a new game in the `open` status with no players and empty state, persists
+        it, and returns its identifier.
+
+        Note: `maximum_players` is not validated beyond its `u8` range, so `0` is accepted
+        and creates a game that no player can join.
+      operationId: postGames
+      tags: [Games]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGameRequest"
+            example:
+              maximum_players: 4
+      responses:
+        "201":
+          description: Game created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateGameResponse"
+              example:
+                id: 123e4567-e89b-12d3-a456-426614174000
+        "400":
+          $ref: "#/components/responses/MalformedJson"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/UnprocessableBody"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /games/{id}:
+    get:
+      summary: Get a game by id
+      description: |
+        Loads a single game by its identifier and returns its public projection.
+
+        The stored row is mapped through `TryFrom<GameRow> for Game`, which validates the
+        persisted data: an unrecognized `status` string, unparseable `state` JSON, a
+        `maximum_players` value outside `u8`, or a `running` game whose state is not
+        initialized all surface as `500`, not `400` — the request was well-formed, the
+        stored data was not.
+      operationId: getGame
+      tags: [Games]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifier of the game to fetch.
+          schema:
+            $ref: "#/components/schemas/GameId"
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        "200":
+          description: The requested game.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetGameResponse"
+              example:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                status: Open
+        "400":
+          $ref: "#/components/responses/InvalidPathParam"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  schemas:
+    CreateGameRequest:
+      type: object
+      description: Body of `POST /games` (`CreateGameRequest`, deserialize-only DTO).
+      required: [maximum_players]
+      properties:
+        maximum_players:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 255
+          description: >-
+            Maximum number of players allowed in the game. Bounds come from the Rust `u8`
+            field type and are mirrored by the `games_maximum_players_u8_range` CHECK
+            constraint in the database.
+          example: 4
+      example:
+        maximum_players: 4
+    CreateGameResponse:
+      type: object
+      description: Body of a successful `POST /games` (`CreateGameResponse`).
+      required: [id]
+      properties:
+        id:
+          $ref: "#/components/schemas/GameId"
+      example:
+        id: 123e4567-e89b-12d3-a456-426614174000
+    GetGameResponse:
+      type: object
+      description: >-
+        Public projection of a game (`GetGameResponse`, serialize-only DTO). Used both as
+        the body of `GET /games/{id}` and as the element type of `GET /games`. Domain
+        fields not exposed here — `players`, `state`, `max_players`, `created_at` — are
+        deliberately absent from the DTO.
+      required: [id, status]
+      properties:
+        id:
+          $ref: "#/components/schemas/GameId"
+        status:
+          $ref: "#/components/schemas/GameStatus"
+      example:
+        id: 123e4567-e89b-12d3-a456-426614174000
+        status: Open
+    GetGamesResponse:
+      type: object
+      description: >-
+        Body of `GET /games` (`GetGamesResponse`). The list is wrapped in an object rather
+        than returned as a bare array, and carries no total or paging metadata.
+      required: [games]
+      properties:
+        games:
+          type: array
+          description: Every game in the store, in unspecified order.
+          items:
+            $ref: "#/components/schemas/GetGameResponse"
+      example:
+        games:
+          - id: 123e4567-e89b-12d3-a456-426614174000
+            status: Open
+          - id: 7f1d3c92-4b6a-4e21-9c8d-0a2b5e6f7c31
+            status: Running
+    GameStatus:
+      type: string
+      description: >-
+        Lifecycle status of a game.
+
+        The values below are **PascalCase**, taken from serde's derived `Serialize` on the
+        `GameStatus` enum, which has no `#[serde(rename_all)]` attribute — verified against
+        a live response. Note that `GameStatus::as_str` and its `FromStr` impl use
+        lowercase (`open`/`running`/`closed`), and that is what is written to and read from
+        the `games.status` column; the lowercase form is the persistence format and is not
+        accepted or emitted over HTTP.
+      enum: [Open, Running, Closed]
+      example: Open
+    GameId:
+      type: string
+      format: uuid
+      description: >-
+        Identifier of a game. `GameId` is a `#[serde(transparent)]` newtype over `Uuid`,
+        so it is serialized as a bare UUID string, not as an object.
+      example: 123e4567-e89b-12d3-a456-426614174000
+    Error:
+      type: object
+      description: >-
+        Error body produced by `AppError::into_response`. Internal error details are
+        logged server-side and never included.
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Client-safe error message.
+          example: internal server error
+      example:
+        error: internal server error
+  responses:
+    MalformedJson:
+      description: >-
+        Request body is not syntactically valid JSON. Produced by axum's `Json` extractor
+        rejection, whose body is plain text rather than the JSON error envelope.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: "Failed to parse the request body as JSON: expected value at line 1 column 1"
+    UnsupportedMediaType:
+      description: >-
+        `Content-Type` is missing or is not `application/json`. Produced by axum's `Json`
+        extractor rejection; body is plain text.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: "Expected request with `Content-Type: application/json`"
+    UnprocessableBody:
+      description: >-
+        Body is valid JSON but does not match `CreateGameRequest` — for example
+        `maximum_players` is missing, not an integer, or outside 0–255. Produced by axum's
+        `Json` extractor rejection; body is plain text.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: "Failed to deserialize the JSON body into the target type: maximum_players: invalid value: integer `300`, expected u8"
+    NotFound:
+      description: >-
+        No game exists with the given id. Produced by `AppError::NotFound`, which
+        `db::find_game` raises when the query matches no row.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: game was not found
+    InvalidPathParam:
+      description: >-
+        A path segment could not be parsed into its target type — for `GET /games/{id}`,
+        `{id}` is not a valid UUID. Produced by axum's `Path` extractor rejection before
+        the handler runs, so the body is plain text rather than the JSON error envelope.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: "Invalid URL: Cannot parse `id` with value `not-a-uuid`: UUID parsing failed: invalid character: found `n` at 0"
+    InvalidQueryString:
+      description: >-
+        The query string could not be deserialized into `GameFilter` — in practice, any
+        non-integer `status` value. Produced by axum's `Query` extractor rejection; body is
+        plain text.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: "Failed to deserialize query string: status: invalid digit found in string"
+    InternalError:
+      description: >-
+        The request was well-formed but could not be served. Covers `AppError::Unexpected`
+        (any `sqlx` failure via `From<sqlx::Error>`, or state (de)serialization failure)
+        and `AppError::InvalidData` / `AppError::InvalidState` — raised when a persisted
+        row fails to map back into the domain `Game` — all of which collapse to this
+        status. Details are logged server-side and never returned.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: internal server error

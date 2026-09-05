@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::game::game::{Game, GameId};
 use sqlx::postgres::PgPoolOptions;
-use sqlx::{Error, PgPool, query_as};
+use sqlx::{ PgPool, query_as};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -50,22 +50,32 @@ pub(crate) struct GameEvents {
     pub kind: String,
 }
 
-pub(crate) async fn findGame(pool: &PgPool, id: Uuid) -> Result<Option<GameRow>, Error> {
+pub(crate) async fn find_games(pool: &PgPool) -> Result<Vec<Game>, AppError> {
+    let rows = query_as!(
+        GameRow,
+        r#"SELECT id, status, state, maximum_players, created_at FROM games"#
+    ).fetch_all(pool).await?;
+
+    rows.into_iter().map(Game::try_from).collect()
+}
+
+pub(crate) async fn find_game(pool: &PgPool, id: Uuid) -> Result<Game, AppError> {
     let row = query_as!(
         GameRow,
         r#"SELECT id, status, state, maximum_players, created_at FROM games WHERE id = $1"#,
         id
     )
     .fetch_optional(pool)
-    .await?;
+    .await?
+    .ok_or(AppError::NotFound)?;
 
-    Ok(row)
+    Game::try_from(row)
 }
 
 pub(crate) async fn insert_game(pool: &PgPool, game: &Game) -> Result<(), AppError> {
     let state = serde_json::to_value(&game.state).map_err(AppError::unexpected)?;
 
-    let result = sqlx::query!(
+    sqlx::query!(
         r#"
         INSERT INTO games (
             id,

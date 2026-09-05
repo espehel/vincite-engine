@@ -1,4 +1,4 @@
-use crate::api::dto::{CreateGameRequest, CreateGameResponse};
+use crate::api::dto::{CreateGameRequest, CreateGameResponse, GetGameResponse, GetGamesResponse};
 use crate::db;
 use crate::error::AppError;
 use crate::game::game::Game;
@@ -29,12 +29,39 @@ async fn post_games(
         }),
     ))
 }
-async fn get_games(Query(filter): Query<GameFilter>) -> String {
-    format!("fetching games with status {:?}", filter.status)
+async fn get_games(
+    State(pool): State<PgPool>,
+    Query(filter): Query<GameFilter>,
+) -> Result<(StatusCode, Json<GetGamesResponse>), AppError> {
+    let games = db::find_games(&pool).await?;
+
+    Ok((
+        StatusCode::OK,
+        Json(GetGamesResponse {
+            games: games
+                .iter()
+                .map(|game| GetGameResponse {
+                    id: game.id,
+                    status: game.status,
+                })
+                .collect(),
+        }),
+    ))
 }
 
-async fn get_game(Path(id): Path<Uuid>) -> String {
-    format!("fetching game {id}")
+async fn get_game(
+    State(pool): State<PgPool>,
+    Path(id): Path<Uuid>,
+) -> Result<(StatusCode, Json<GetGameResponse>), AppError> {
+    let game = db::find_game(&pool, id).await?;
+
+    Ok((
+        StatusCode::OK,
+        Json(GetGameResponse {
+            id: game.id,
+            status: game.status,
+        }),
+    ))
 }
 
 async fn get_game_player(Path((game_id, player_id)): Path<(Uuid, Uuid)>) -> String {

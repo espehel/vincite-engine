@@ -22,13 +22,8 @@ impl GameId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct PlayerId(Uuid);
-impl PlayerId {
-    pub(crate) const fn into_uuid(self) -> Uuid {
-        self.0
-    }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameStatus {
     Open,
     Running,
