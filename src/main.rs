@@ -3,7 +3,7 @@ mod db;
 mod error;
 mod game;
 
-use crate::api::create_games_router;
+use crate::api::{create_game_router, create_player_router};
 
 use crate::db::establish_connection;
 use axum::Router;
@@ -26,10 +26,10 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let app = Router::new()
-        .nest("/games", create_games_router())
+        .nest("/games", create_game_router())
+        .nest("/players", create_player_router())
         .with_state(pool);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
-        .await?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
 
     let local_addr = listener.local_addr()?;
     tracing::info!(address = %local_addr, port = local_addr.port(), "server started successfully");

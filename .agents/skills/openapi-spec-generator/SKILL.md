@@ -30,21 +30,23 @@ Generate complete, valid OpenAPI 3.x or Swagger 2.0 specifications from descript
 
 Before writing any YAML/JSON, ask (or infer from context) the following:
 
-| Question | Why it matters |
-|---|---|
-| OpenAPI 3.x or Swagger 2.0? | Different `info`, `servers`/`host`, `components`/`definitions` structure |
-| Output format: YAML or JSON? | YAML default unless user specifies JSON |
-| What does this API do? | Sets `info.title`, `info.description`, tags |
-| List of endpoints (or code to extract from)? | Core paths object |
-| Authentication type(s)? | `securitySchemes` — see reference |
-| Common data models or entities? | `components/schemas` / `definitions` |
-| Any existing partial spec to extend? | Merge rather than overwrite |
+| Question                                     | Why it matters                                                           |
+|----------------------------------------------|--------------------------------------------------------------------------|
+| OpenAPI 3.x or Swagger 2.0?                  | Different `info`, `servers`/`host`, `components`/`definitions` structure |
+| Output format: YAML or JSON?                 | YAML default unless user specifies JSON                                  |
+| What does this API do?                       | Sets `info.title`, `info.description`, tags                              |
+| List of endpoints (or code to extract from)? | Core paths object                                                        |
+| Authentication type(s)?                      | `securitySchemes` — see reference                                        |
+| Common data models or entities?              | `components/schemas` / `definitions`                                     |
+| Any existing partial spec to extend?         | Merge rather than overwrite                                              |
 
-If the user provides code (Express routes, FastAPI, Django URLs, Spring controllers, Rust/axum routers, etc.), **extract endpoints automatically** — do not ask what the user already told you.
+If the user provides code (Express routes, FastAPI, Django URLs, Spring controllers, Rust/axum routers, etc.), **extract
+endpoints automatically** — do not ask what the user already told you.
 
 ### Step 2 — Build the Spec
 
-Follow the structure guide for the chosen version. Always produce a **complete, valid spec** — never leave placeholder comments like `# TODO: add schema`.
+Follow the structure guide for the chosen version. Always produce a **complete, valid spec** — never leave placeholder
+comments like `# TODO: add schema`.
 
 #### OpenAPI 3.x Skeleton
 
@@ -70,8 +72,8 @@ paths:
     get:
       summary: List resources
       operationId: listResources
-      tags: [<Tag>]
-      parameters: []
+      tags: [ <Tag> ]
+      parameters: [ ]
       responses:
         "200":
           description: Success
@@ -80,16 +82,16 @@ paths:
               schema:
                 $ref: "#/components/schemas/ResourceList"
               example:
-                items: []
+                items: [ ]
                 total: 0
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalError"
       security:
-        - BearerAuth: []
+        - BearerAuth: [ ]
 components:
-  schemas: {}
+  schemas: { }
   responses:
     Unauthorized:
       description: Authentication required
@@ -103,7 +105,7 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-  securitySchemes: {}
+  securitySchemes: { }
 ```
 
 #### Swagger 2.0 Skeleton
@@ -116,13 +118,13 @@ info:
   description: <Short description>
 host: api.example.com
 basePath: /v1
-schemes: [https]
-consumes: [application/json]
-produces: [application/json]
-tags: []
-paths: {}
-definitions: {}
-securityDefinitions: {}
+schemes: [ https ]
+consumes: [ application/json ]
+produces: [ application/json ]
+tags: [ ]
+paths: { }
+definitions: { }
+securityDefinitions: { }
 ```
 
 ### Step 3 — Schemas and Models
@@ -139,7 +141,7 @@ securityDefinitions: {}
 # Pagination wrapper
 PagedResult:
   type: object
-  required: [items, total, page, pageSize]
+  required: [ items, total, page, pageSize ]
   properties:
     items:
       type: array
@@ -161,7 +163,7 @@ PagedResult:
 # Standard error
 Error:
   type: object
-  required: [code, message]
+  required: [ code, message ]
   properties:
     code:
       type: string
@@ -189,20 +191,22 @@ Timestamps:
 
 Read `reference/security-schemes.md` for detailed patterns. Quick reference:
 
-| Scheme | OAS 3.x type | Notes |
-|---|---|---|
-| Bearer JWT | `http`, scheme `bearer` | Most common for REST APIs |
-| API Key (header) | `apiKey`, in `header` | e.g. `X-API-Key` |
-| API Key (query) | `apiKey`, in `query` | Avoid — leaks in logs |
-| OAuth 2 | `oauth2` | Use `flows` to define grant types |
-| Basic Auth | `http`, scheme `basic` | Only over HTTPS |
-| OpenID Connect | `openIdConnect` | Provide `openIdConnectUrl` |
+| Scheme           | OAS 3.x type            | Notes                             |
+|------------------|-------------------------|-----------------------------------|
+| Bearer JWT       | `http`, scheme `bearer` | Most common for REST APIs         |
+| API Key (header) | `apiKey`, in `header`   | e.g. `X-API-Key`                  |
+| API Key (query)  | `apiKey`, in `query`    | Avoid — leaks in logs             |
+| OAuth 2          | `oauth2`                | Use `flows` to define grant types |
+| Basic Auth       | `http`, scheme `basic`  | Only over HTTPS                   |
+| OpenID Connect   | `openIdConnect`         | Provide `openIdConnectUrl`        |
 
-Apply security **globally** at the root and **override per-operation** only where it differs (e.g., public endpoints use `security: []`).
+Apply security **globally** at the root and **override per-operation** only where it differs (e.g., public endpoints use
+`security: []`).
 
 ### Step 5 — Parameters
 
 **Path parameters** — always `required: true`:
+
 ```yaml
 parameters:
   - name: userId
@@ -215,12 +219,13 @@ parameters:
 ```
 
 **Query parameters** — document defaults and enums:
+
 ```yaml
   - name: status
     in: query
     schema:
       type: string
-      enum: [active, inactive, pending]
+      enum: [ active, inactive, pending ]
       default: active
 ```
 
@@ -230,19 +235,19 @@ parameters:
 
 Always include at minimum:
 
-| Code | When |
-|---|---|
-| `200` | Successful GET, PUT, PATCH |
+| Code  | When                                    |
+|-------|-----------------------------------------|
+| `200` | Successful GET, PUT, PATCH              |
 | `201` | Successful POST that creates a resource |
-| `204` | Successful DELETE (no body) |
-| `400` | Validation / bad request |
-| `401` | Missing or invalid auth |
-| `403` | Authenticated but not authorized |
-| `404` | Resource not found |
-| `409` | Conflict (duplicate, state mismatch) |
-| `422` | Unprocessable entity (semantic errors) |
-| `429` | Rate limited |
-| `500` | Internal server error |
+| `204` | Successful DELETE (no body)             |
+| `400` | Validation / bad request                |
+| `401` | Missing or invalid auth                 |
+| `403` | Authenticated but not authorized        |
+| `404` | Resource not found                      |
+| `409` | Conflict (duplicate, state mismatch)    |
+| `422` | Unprocessable entity (semantic errors)  |
+| `429` | Rate limited                            |
+| `500` | Internal server error                   |
 
 Use `$ref` to `components/responses` for `401`, `403`, `404`, `429`, `500` to avoid repetition.
 
@@ -279,30 +284,36 @@ Before delivering the spec, verify:
 When the user provides source code, extract:
 
 **Express / Koa / Fastify (Node.js)**
+
 - Look for `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()` calls
 - Route params `:param` → path parameter `{param}`
 - Middleware like `authenticate` → note security requirement
 - `req.body`, `req.query`, `req.params` usage → infer request schema
 
 **FastAPI / Flask (Python)**
+
 - Decorators: `@app.get()`, `@router.post()`, etc.
 - Pydantic models → translate directly to JSON Schema
 - `Query()`, `Path()`, `Body()` → map to parameter location
 
 **Spring Boot (Java)**
+
 - `@GetMapping`, `@PostMapping`, etc.
 - `@PathVariable`, `@RequestParam`, `@RequestBody`
 - DTO classes → schemas
 
 **Django REST Framework**
+
 - `ViewSet` and `Router` → CRUD endpoints
 - `Serializer` fields → schema properties
 
 **Rails**
+
 - `routes.rb` resource routes → standard REST endpoints
 - Strong params → request body schema
 
 **Rust / Axum**
+
 - Walk `Router` chains: `.route()`, `.nest()`, `.merge()`, `.fallback()` → paths
 - Extractors (`Path`, `Query`, `Json`, `Form`, `Multipart`, `TypedHeader`) → parameters and request bodies
 - Handler return type → success response; the error type's `IntoResponse` impl → all `4xx`/`5xx`
@@ -318,15 +329,15 @@ derives on the types they mention.
 
 ### A1 — Read files in this order
 
-| # | File | What to pull out |
-|---|---|---|
-| 1 | `Cargo.toml` | **`axum` version** (changes path syntax — see A2), plus `serde`, `uuid`, `time`/`chrono`, `sqlx`, `rust_decimal`, and whether `utoipa`/`aide` is present (see A9) |
-| 2 | `main.rs` / `lib.rs` | Root `Router`, `.nest()` prefixes, `TcpListener::bind(..)` → `servers[].url`, global `.layer()` middleware |
-| 3 | Router modules (e.g. `src/api/router.rs`) | Routes, methods, handler signatures |
-| 4 | DTO modules (e.g. `src/api/dto.rs`) | Request/response schemas — the **only** structs that belong in `components/schemas` |
-| 5 | Domain modules (e.g. `src/game/`) | Newtypes, enums, and value objects the DTOs reference |
-| 6 | Error module (e.g. `src/error.rs`) | The complete `4xx`/`5xx` set and the error body shape |
-| 7 | `migrations/` (if present) | `NOT NULL` → `required`, `VARCHAR(n)` → `maxLength`, `CHECK` → `enum`/`minimum` |
+| # | File                                                    | What to pull out                                                                                                                                                  |
+|---|---------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1 | `Cargo.toml`                                            | **`axum` version** (changes path syntax — see A2), plus `serde`, `uuid`, `time`/`chrono`, `sqlx`, `rust_decimal`, and whether `utoipa`/`aide` is present (see A9) |
+| 2 | `main.rs` / `lib.rs`                                    | Root `Router`, `.nest()` prefixes, `TcpListener::bind(..)` → `servers[].url`, global `.layer()` middleware                                                        |
+| 3 | Router modules (e.g. `../../../src/api/game_router.rs`) | Routes, methods, handler signatures                                                                                                                               |
+| 4 | DTO modules (e.g. `src/api/dto.rs`)                     | Request/response schemas — the **only** structs that belong in `components/schemas`                                                                               |
+| 5 | Domain modules (e.g. `src/game/`)                       | Newtypes, enums, and value objects the DTOs reference                                                                                                             |
+| 6 | Error module (e.g. `src/error.rs`)                      | The complete `4xx`/`5xx` set and the error body shape                                                                                                             |
+| 7 | `migrations/` (if present)                              | `NOT NULL` → `required`, `VARCHAR(n)` → `maxLength`, `CHECK` → `enum`/`minimum`                                                                                   |
 
 Path prefixes compose top-down: a route `/{id}` inside `create_games_router()` that `main.rs` mounts
 with `.nest("/games", ..)` is **`/games/{id}`**. `nest` strips the prefix before the inner router
@@ -336,28 +347,28 @@ sees it, so handler paths are always relative — never emit the inner path on i
 
 ```rust
 Router::new()
-    .route("/", get(get_games).post(post_games))          // 2 operations, same path
-    .route("/{id}", get(get_game))                        // path param
-    .route("/{game_id}/players/{player_id}", get(get_game_player))
+.route("/", get(get_games).post(post_games))          // 2 operations, same path
+.route("/{id}", get(get_game))                        // path param
+.route("/{game_id}/players/{player_id}", get(get_game_player))
 ```
 
-| Builder | Meaning for the spec |
-|---|---|
-| `.route(p, get(h).post(h2))` | One path item, one operation per chained method |
-| `.nest(prefix, router)` | Prepend `prefix` to every inner path |
-| `.nest_service(prefix, svc)` | Non-handler mount (static files, proxy) — usually omit |
-| `.merge(other)` | Union of paths at the same level, no prefix |
-| `.fallback(h)` | Not a path — document as the global `404` response |
-| `.route_layer(l)` | Applies only to that router's routes → **per-operation** `security` |
-| `.layer(l)` | Applies to everything below → root-level `security`/common headers |
-| `.method_not_allowed_fallback(h)` | Global `405` |
+| Builder                           | Meaning for the spec                                                |
+|-----------------------------------|---------------------------------------------------------------------|
+| `.route(p, get(h).post(h2))`      | One path item, one operation per chained method                     |
+| `.nest(prefix, router)`           | Prepend `prefix` to every inner path                                |
+| `.nest_service(prefix, svc)`      | Non-handler mount (static files, proxy) — usually omit              |
+| `.merge(other)`                   | Union of paths at the same level, no prefix                         |
+| `.fallback(h)`                    | Not a path — document as the global `404` response                  |
+| `.route_layer(l)`                 | Applies only to that router's routes → **per-operation** `security` |
+| `.layer(l)`                       | Applies to everything below → root-level `security`/common headers  |
+| `.method_not_allowed_fallback(h)` | Global `405`                                                        |
 
 **Path syntax is version-dependent — check `Cargo.toml` first:**
 
-| axum | Param | Wildcard |
-|---|---|---|
-| `0.8` and later | `/{id}` | `/{*rest}` |
-| `0.7` and earlier | `/:id` | `/*rest` |
+| axum              | Param   | Wildcard   |
+|-------------------|---------|------------|
+| `0.8` and later   | `/{id}` | `/{*rest}` |
+| `0.7` and earlier | `/:id`  | `/*rest`   |
 
 Both forms become OpenAPI `/{id}`. A wildcard becomes a `string` path param — add
 `x-axum-wildcard: true` if the greedy match matters to consumers.
@@ -366,23 +377,23 @@ Both forms become OpenAPI `/{id}`. A wildcard becomes a `string` path param — 
 
 Argument order is irrelevant; only the type matters.
 
-| Extractor | OpenAPI mapping |
-|---|---|
-| `Path<T>` (struct) | One path param per field, all `required: true` |
-| `Path<(A, B)>` (tuple) | Params bind **positionally** to the path's `{..}` segments, left to right — take the *names* from the route string, the *types* from the tuple |
-| `Query<T>` | One query param per field; `Option<F>` → `required: false`; `#[serde(default)]` → `required: false` + `default` |
-| `Json<T>` | `requestBody`, `application/json`, `required: true` |
-| `Form<T>` | `requestBody`, `application/x-www-form-urlencoded` |
-| `Multipart` | `requestBody`, `multipart/form-data` — read `.next_field()` calls for field names |
-| `TypedHeader<T>` | Header param named by the header's `name()` |
-| `HeaderMap` | Untyped — inspect `.get("..")` calls for the header names actually read |
-| `Bytes` / `Body` | `requestBody`, `application/octet-stream` |
-| `String` | `requestBody`, `text/plain` |
-| `Option<Json<T>>` | `requestBody` with `required: false` (axum 0.8+) |
-| `Result<Json<T>, JsonRejection>` | Body optional/lenient — handler owns the `400`, so read its body |
-| `State<T>` / `Extension<T>` | **Not part of the API surface — never emit.** DB pools, config, auth context |
-| `ConnectInfo<T>` / `MatchedPath` / `OriginalUri` | Transport metadata — never emit |
-| Custom `FromRequestParts` impl | **Read the impl.** Rejecting on a missing/invalid token → `securitySchemes` entry + `401`; reading a header → header param |
+| Extractor                                        | OpenAPI mapping                                                                                                                                |
+|--------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Path<T>` (struct)                               | One path param per field, all `required: true`                                                                                                 |
+| `Path<(A, B)>` (tuple)                           | Params bind **positionally** to the path's `{..}` segments, left to right — take the *names* from the route string, the *types* from the tuple |
+| `Query<T>`                                       | One query param per field; `Option<F>` → `required: false`; `#[serde(default)]` → `required: false` + `default`                                |
+| `Json<T>`                                        | `requestBody`, `application/json`, `required: true`                                                                                            |
+| `Form<T>`                                        | `requestBody`, `application/x-www-form-urlencoded`                                                                                             |
+| `Multipart`                                      | `requestBody`, `multipart/form-data` — read `.next_field()` calls for field names                                                              |
+| `TypedHeader<T>`                                 | Header param named by the header's `name()`                                                                                                    |
+| `HeaderMap`                                      | Untyped — inspect `.get("..")` calls for the header names actually read                                                                        |
+| `Bytes` / `Body`                                 | `requestBody`, `application/octet-stream`                                                                                                      |
+| `String`                                         | `requestBody`, `text/plain`                                                                                                                    |
+| `Option<Json<T>>`                                | `requestBody` with `required: false` (axum 0.8+)                                                                                               |
+| `Result<Json<T>, JsonRejection>`                 | Body optional/lenient — handler owns the `400`, so read its body                                                                               |
+| `State<T>` / `Extension<T>`                      | **Not part of the API surface — never emit.** DB pools, config, auth context                                                                   |
+| `ConnectInfo<T>` / `MatchedPath` / `OriginalUri` | Transport metadata — never emit                                                                                                                |
+| Custom `FromRequestParts` impl                   | **Read the impl.** Rejecting on a missing/invalid token → `securitySchemes` entry + `401`; reading a header → header param                     |
 
 `Query<T>` cannot express repeated keys (`?tag=a&tag=b`) with plain serde. If a field is
 `Vec<T>` the code must use `serde_qs`/`axum-extra`'s `Query` — check which, then emit
@@ -390,19 +401,19 @@ Argument order is irrelevant; only the type matters.
 
 ### A4 — Return types → success responses
 
-| Handler returns | Status | Body |
-|---|---|---|
-| `Json<T>` | `200` | `application/json`, schema of `T` |
-| `(StatusCode, Json<T>)` | that code (e.g. `201`) | schema of `T` |
-| `(StatusCode, HeaderMap, Json<T>)` | that code | body + response `headers` |
-| `String` / `&'static str` | `200` | `text/plain` |
-| `StatusCode` | that code | none |
-| `()` | `200` | empty |
-| `StatusCode::NO_CONTENT` | `204` | none |
-| `Redirect` | `303`/`307`/`308` | `Location` header |
-| `Result<T, E>` | success from `T` | **errors from `E`'s `IntoResponse` impl — see A5** |
-| `impl IntoResponse` | follow the actual returned expressions | — |
-| `Sse<S>` / `Body::from_stream` | `200` | `text/event-stream` / streamed — mark `x-streaming: true` |
+| Handler returns                    | Status                                 | Body                                                      |
+|------------------------------------|----------------------------------------|-----------------------------------------------------------|
+| `Json<T>`                          | `200`                                  | `application/json`, schema of `T`                         |
+| `(StatusCode, Json<T>)`            | that code (e.g. `201`)                 | schema of `T`                                             |
+| `(StatusCode, HeaderMap, Json<T>)` | that code                              | body + response `headers`                                 |
+| `String` / `&'static str`          | `200`                                  | `text/plain`                                              |
+| `StatusCode`                       | that code                              | none                                                      |
+| `()`                               | `200`                                  | empty                                                     |
+| `StatusCode::NO_CONTENT`           | `204`                                  | none                                                      |
+| `Redirect`                         | `303`/`307`/`308`                      | `Location` header                                         |
+| `Result<T, E>`                     | success from `T`                       | **errors from `E`'s `IntoResponse` impl — see A5**        |
+| `impl IntoResponse`                | follow the actual returned expressions | —                                                         |
+| `Sse<S>` / `Body::from_stream`     | `200`                                  | `text/event-stream` / streamed — mark `x-streaming: true` |
 
 `impl IntoResponse` erases the type, so the signature tells you nothing — read the `return`/`Ok(..)`
 expressions in the body. If the handler has `#[axum::debug_handler]`, that is just a diagnostic
@@ -425,7 +436,9 @@ fn public(&self) -> (StatusCode, &'static str) {
 }
 
 #[derive(Serialize)]
-struct ErrorBody { error: &'static str }
+struct ErrorBody {
+    error: &'static str
+}
 ```
 
 Yields exactly `404`, `409`, `500` — plus this schema, which is the error body for the **whole** API:
@@ -433,7 +446,7 @@ Yields exactly `404`, `409`, `500` — plus this schema, which is the error body
 ```yaml
 Error:
   type: object
-  required: [error]
+  required: [ error ]
   properties:
     error:
       type: string
@@ -441,6 +454,7 @@ Error:
 ```
 
 Rules:
+
 - Emit **only** the statuses the match arms can actually produce. Do not pad with the generic
   `4xx` list from Step 6 — an axum API returns `403`/`422` only if some `IntoResponse` says so.
 - The variant's public message is the response `example`; the `#[error(..)]` `Display` string is for
@@ -455,24 +469,24 @@ Rules:
 
 ### A6 — Rust types → schemas
 
-| Rust | `type` | `format` / constraints |
-|---|---|---|
-| `bool` | `boolean` | |
-| `i8`/`i16`/`i32`/`u8`/`u16`/`u32` | `integer` | `int32` + `minimum`/`maximum` from the range (`u8` → `0`–`255`) |
-| `i64`/`u64`/`isize`/`usize` | `integer` | `int64`; unsigned → `minimum: 0` |
-| `f32` / `f64` | `number` | `float` / `double` |
-| `String` / `&str` | `string` | |
-| `char` | `string` | `minLength: 1, maxLength: 1` |
-| `uuid::Uuid` | `string` | `uuid` |
-| `time::OffsetDateTime` / `chrono::DateTime<Utc>` | `string` | `date-time` (RFC 3339) |
-| `time::Date` / `chrono::NaiveDate` | `string` | `date` |
-| `time::Duration` / `std::time::Duration` | check the serializer — often `{secs, nanos}` object | |
-| `rust_decimal::Decimal` | `string` | `decimal` — serialized as a string to keep precision |
-| `Vec<T>` / `HashSet<T>` | `array` | `items: T`; set → `uniqueItems: true` |
-| `HashMap<String, V>` / `BTreeMap` | `object` | `additionalProperties: V` |
-| `Option<T>` | schema of `T` | omit from `required`; add `nullable: true` (3.0) or `type: [.., "null"]` (3.1) |
-| `serde_json::Value` | any | OAS 3.1: `{}`; OAS 3.0: `additionalProperties: true` |
-| `()` | — | no body |
+| Rust                                             | `type`                                              | `format` / constraints                                                         |
+|--------------------------------------------------|-----------------------------------------------------|--------------------------------------------------------------------------------|
+| `bool`                                           | `boolean`                                           |                                                                                |
+| `i8`/`i16`/`i32`/`u8`/`u16`/`u32`                | `integer`                                           | `int32` + `minimum`/`maximum` from the range (`u8` → `0`–`255`)                |
+| `i64`/`u64`/`isize`/`usize`                      | `integer`                                           | `int64`; unsigned → `minimum: 0`                                               |
+| `f32` / `f64`                                    | `number`                                            | `float` / `double`                                                             |
+| `String` / `&str`                                | `string`                                            |                                                                                |
+| `char`                                           | `string`                                            | `minLength: 1, maxLength: 1`                                                   |
+| `uuid::Uuid`                                     | `string`                                            | `uuid`                                                                         |
+| `time::OffsetDateTime` / `chrono::DateTime<Utc>` | `string`                                            | `date-time` (RFC 3339)                                                         |
+| `time::Date` / `chrono::NaiveDate`               | `string`                                            | `date`                                                                         |
+| `time::Duration` / `std::time::Duration`         | check the serializer — often `{secs, nanos}` object |                                                                                |
+| `rust_decimal::Decimal`                          | `string`                                            | `decimal` — serialized as a string to keep precision                           |
+| `Vec<T>` / `HashSet<T>`                          | `array`                                             | `items: T`; set → `uniqueItems: true`                                          |
+| `HashMap<String, V>` / `BTreeMap`                | `object`                                            | `additionalProperties: V`                                                      |
+| `Option<T>`                                      | schema of `T`                                       | omit from `required`; add `nullable: true` (3.0) or `type: [.., "null"]` (3.1) |
+| `serde_json::Value`                              | any                                                 | OAS 3.1: `{}`; OAS 3.0: `additionalProperties: true`                           |
+| `()`                                             | —                                                   | no body                                                                        |
 
 **Unsigned integers are a free constraint.** `maximum_players: u8` is not just `integer` — it is
 `minimum: 0, maximum: 255`. Emit the bounds; they are part of the contract the compiler enforces.
@@ -496,6 +510,7 @@ one-element array — check for the attribute before assuming.
 ```rust
 Self::Open => "open", Self::Running => "running", Self::Closed => "closed"
 ```
+
 → `enum: [open, running, closed]`
 
 **Never emit `sqlx::FromRow` structs** (e.g. `GameRow`) as API schemas. They mirror table columns
@@ -504,36 +519,36 @@ the spec only if a handler actually serializes one.
 
 ### A7 — serde attributes → schema shape
 
-| Attribute | Effect |
-|---|---|
-| `#[serde(rename_all = "camelCase")]` | **Property names in the spec are the renamed ones.** `maximum_players` stays snake_case without it |
-| `#[serde(rename = "x")]` | Single property renamed |
-| `#[serde(default)]` / `default = "f"` | Drop from `required`; add `default` when the value is a literal |
-| `#[serde(skip_serializing_if = "Option::is_none")]` | Not in `required` on responses |
-| `#[serde(skip)]` | Omit the field entirely |
-| `#[serde(flatten)]` | Merge inline, or `allOf` with the flattened schema |
-| `#[serde(transparent)]` | Newtype → inner type's schema (see A6) |
-| `#[serde(deny_unknown_fields)]` | `additionalProperties: false` |
-| `#[serde(tag = "type")]` | `oneOf` + `discriminator: {propertyName: type}` |
-| `#[serde(tag = "t", content = "c")]` | `oneOf` over `{t, c}` wrappers |
-| `#[serde(untagged)]` | `oneOf`, no discriminator |
-| `#[serde(with = "..")]` / `serde_as` | **Read the module** — it overrides the type's default wire format |
+| Attribute                                           | Effect                                                                                             |
+|-----------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `#[serde(rename_all = "camelCase")]`                | **Property names in the spec are the renamed ones.** `maximum_players` stays snake_case without it |
+| `#[serde(rename = "x")]`                            | Single property renamed                                                                            |
+| `#[serde(default)]` / `default = "f"`               | Drop from `required`; add `default` when the value is a literal                                    |
+| `#[serde(skip_serializing_if = "Option::is_none")]` | Not in `required` on responses                                                                     |
+| `#[serde(skip)]`                                    | Omit the field entirely                                                                            |
+| `#[serde(flatten)]`                                 | Merge inline, or `allOf` with the flattened schema                                                 |
+| `#[serde(transparent)]`                             | Newtype → inner type's schema (see A6)                                                             |
+| `#[serde(deny_unknown_fields)]`                     | `additionalProperties: false`                                                                      |
+| `#[serde(tag = "type")]`                            | `oneOf` + `discriminator: {propertyName: type}`                                                    |
+| `#[serde(tag = "t", content = "c")]`                | `oneOf` over `{t, c}` wrappers                                                                     |
+| `#[serde(untagged)]`                                | `oneOf`, no discriminator                                                                          |
+| `#[serde(with = "..")]` / `serde_as`                | **Read the module** — it overrides the type's default wire format                                  |
 
 A struct deriving only `Deserialize` is request-only; only `Serialize` is response-only. Don't
 reuse one schema for both directions if the derives differ.
 
 ### A8 — Layers → security and common responses
 
-| Layer | Spec effect |
-|---|---|
-| `middleware::from_fn(auth)` | Read the fn: rejecting without a token → `securitySchemes` + `401` on covered routes |
-| `ValidateRequestHeaderLayer::bearer(..)` | `http`/`bearer` scheme, `401` |
-| `tower_http::auth::AsyncRequireAuthorizationLayer` | Read the impl for scheme and status |
-| `CorsLayer` | Not in `paths` — note allowed origins in `info.description` |
-| `TraceLayer` / `SetRequestIdLayer` | `X-Request-Id` as a `components/parameters` header |
-| `RequestBodyLimitLayer` | `413` on body-accepting operations; note the limit |
-| `TimeoutLayer` | `408`/`504` |
-| `CompressionLayer` | Nothing — transport concern |
+| Layer                                              | Spec effect                                                                          |
+|----------------------------------------------------|--------------------------------------------------------------------------------------|
+| `middleware::from_fn(auth)`                        | Read the fn: rejecting without a token → `securitySchemes` + `401` on covered routes |
+| `ValidateRequestHeaderLayer::bearer(..)`           | `http`/`bearer` scheme, `401`                                                        |
+| `tower_http::auth::AsyncRequireAuthorizationLayer` | Read the impl for scheme and status                                                  |
+| `CorsLayer`                                        | Not in `paths` — note allowed origins in `info.description`                          |
+| `TraceLayer` / `SetRequestIdLayer`                 | `X-Request-Id` as a `components/parameters` header                                   |
+| `RequestBodyLimitLayer`                            | `413` on body-accepting operations; note the limit                                   |
+| `TimeoutLayer`                                     | `408`/`504`                                                                          |
+| `CompressionLayer`                                 | Nothing — transport concern                                                          |
 
 Scope decides placement: `.layer()` on the root router → root `security`; `.route_layer()` on a
 nested router → `security` on those operations only, with public routes carrying `security: []`.
@@ -578,12 +593,12 @@ afterwards so the spec stays in sync.
 
 From the router, DTOs, and error enum above:
 
-| Method | Path | Handler | Parameters | Request body | Responses |
-|---|---|---|---|---|---|
-| `POST` | `/games` | `post_games` | — | `CreateGameRequest` (`maximum_players`: integer 0–255, required) | `201` `CreateGameResponse` (`id`: uuid) · `400`/`422` malformed body · `500` `Error` |
-| `GET` | `/games` | `get_games` | `status` (query, integer int32, optional) | — | `200` `text/plain` *(stub)* |
-| `GET` | `/games/{id}` | `get_game` | `id` (path, uuid, required) | — | `200` `text/plain` *(stub)* · `400` bad uuid |
-| `GET` | `/games/{game_id}/players/{player_id}` | `get_game_player` | `game_id`, `player_id` (path, uuid, required) | — | `200` `text/plain` *(stub)* · `400` bad uuid |
+| Method | Path                                   | Handler           | Parameters                                    | Request body                                                     | Responses                                                                            |
+|--------|----------------------------------------|-------------------|-----------------------------------------------|------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| `POST` | `/games`                               | `post_games`      | —                                             | `CreateGameRequest` (`maximum_players`: integer 0–255, required) | `201` `CreateGameResponse` (`id`: uuid) · `400`/`422` malformed body · `500` `Error` |
+| `GET`  | `/games`                               | `get_games`       | `status` (query, integer int32, optional)     | —                                                                | `200` `text/plain` *(stub)*                                                          |
+| `GET`  | `/games/{id}`                          | `get_game`        | `id` (path, uuid, required)                   | —                                                                | `200` `text/plain` *(stub)* · `400` bad uuid                                         |
+| `GET`  | `/games/{game_id}/players/{player_id}` | `get_game_player` | `game_id`, `player_id` (path, uuid, required) | —                                                                | `200` `text/plain` *(stub)* · `400` bad uuid                                         |
 
 Note what the types gave us for free: `maximum_players: u8` → `minimum: 0, maximum: 255`;
 `GameId` → `string`/`uuid` (via `#[serde(transparent)]`), not an object; `Path<Uuid>` → a `400` on
@@ -613,6 +628,7 @@ Once the OpenAPI/Swagger Specification output is delivered, ask the user:
 "Would you like me to generate API test cases for this design? (yes/no)"
 
 If the user says **yes**:
+
 - Check if the API Test Case Generator skill is available in the installed skills list
 - If the skill **is available**:
     - Read and follow the instructions in the API Test Case Generator skill
@@ -622,6 +638,7 @@ If the user says **yes**:
       You can install it and re-run.
 
 If the user says **no**:
+
 - End the task here
 
 ---
