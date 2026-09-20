@@ -1,12 +1,14 @@
 use crate::api::dto::{ApiPostResult, ApiResult, CreateGameRequest, GameDto, PlayerDto};
 use crate::db;
 use crate::game::game::{Game, GameId, PlayerId};
+use crate::game::game_state::GameState;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
 use sqlx::PgPool;
+use time::OffsetDateTime;
 
 #[derive(Deserialize)]
 struct GameFilter {
@@ -46,6 +48,16 @@ async fn get_game(State(pool): State<PgPool>, Path(id): Path<GameId>) -> ApiResu
     Ok(Json(game.into()))
 }
 
+async fn get_game_state(
+    State(pool): State<PgPool>,
+    Path(id): Path<GameId>,
+) -> ApiResult<GameState> {
+    let mut game = db::find_game(&pool, id).await?;
+    let game_state = game.state_at(OffsetDateTime::now_utc())?.clone();
+
+    Ok(Json(game_state))
+}
+
 async fn get_game_player(
     State(pool): State<PgPool>,
     Path((game_id, player_id)): Path<(GameId, PlayerId)>,
@@ -59,5 +71,6 @@ pub(crate) fn create_game_router() -> Router<PgPool> {
     Router::new()
         .route("/", get(get_games).post(post_games))
         .route("/{id}", get(get_game))
+        .route("/{id}/state", get(get_game_state))
         .route("/{game_id}/players/{player_id}", get(get_game_player))
 }

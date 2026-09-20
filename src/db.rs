@@ -158,7 +158,7 @@ pub(crate) async fn find_game(pool: &PgPool, id: GameId) -> Result<Game, AppErro
 }
 
 pub(crate) async fn insert_game(pool: &PgPool, game: &Game) -> Result<(), AppError> {
-    let state = serde_json::to_value(&game.state).map_err(AppError::unexpected)?;
+    let state = serde_json::to_value(&game.persisted_state()).map_err(AppError::unexpected)?;
     let player_ids: Vec<Uuid> = game
         .players
         .iter()

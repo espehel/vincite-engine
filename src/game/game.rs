@@ -1,4 +1,6 @@
 use crate::error::AppError;
+use crate::game::game_state::GameState;
+use crate::game::rules;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -18,9 +20,10 @@ impl GameId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 #[serde(transparent)]
 pub struct PlayerId(Uuid);
+
 impl PlayerId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
@@ -79,21 +82,12 @@ impl Player {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct GameState {}
-impl GameState {
-    pub(crate) const fn is_initialized(&self) -> bool {
-        true
-    }
-}
-
 pub struct Game {
     pub(crate) id: GameId,
     pub(crate) status: GameStatus,
-    /// The host is one of `players`, mirroring `game_players.is_host`.
     pub(crate) host: PlayerId,
     pub(crate) players: Vec<Player>,
-    pub(crate) state: GameState,
+    state: Option<GameState>,
     pub(crate) max_players: u8,
     pub(crate) created_at: OffsetDateTime,
 }
@@ -104,10 +98,16 @@ impl Game {
             status: GameStatus::Open,
             host: host.id,
             players: vec![host],
-            state: GameState {},
+            state: None,
             max_players,
             created_at: OffsetDateTime::now_utc(),
         })
+    }
+    pub(crate) fn start(&mut self) -> Result<(), AppError> {
+        let playerIds: Vec<PlayerId> = self.players.iter().map(|p| p.id).collect();
+        self.state = Some(rules::initial_state(&playerIds)?);
+        self.status = GameStatus::Running;
+        Ok(())
     }
     pub(crate) fn restore(
         id: GameId,
@@ -139,9 +139,23 @@ impl Game {
             status,
             host,
             players,
-            state,
+            state: Some(state),
             max_players,
             created_at,
         })
+    }
+    /// The only way to read state.
+    pub(crate) fn state_at(&mut self, now: OffsetDateTime) -> Result<&GameState, AppError> {
+        let tick = rules::tick_at(self.created_at, now);
+        let state = self.state.as_mut().ok_or(AppError::InvalidState {
+            message: "game has not started".to_owned(),
+        })?;
+        rules::advance_to(state, tick);
+        Ok(state)
+    }
+
+    /// Persistence only — writes the state at whatever tick it holds.
+    pub(crate) fn persisted_state(&self) -> Option<&GameState> {
+        self.state.as_ref()
     }
 }
