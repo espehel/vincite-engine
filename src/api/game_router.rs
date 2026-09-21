@@ -4,7 +4,7 @@ use crate::game::game::{Game, GameId, PlayerId};
 use crate::game::game_state::GameState;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use sqlx::PgPool;
@@ -67,10 +67,20 @@ async fn get_game_player(
     Ok(Json(player.into()))
 }
 
+async fn post_game_start(
+    State(pool): State<PgPool>,
+    Path(id): Path<GameId>,
+) -> ApiPostResult<GameDto> {
+    let game = db::start_game(&pool, id).await?;
+
+    Ok((StatusCode::OK, Json(game.into())))
+}
+
 pub(crate) fn create_game_router() -> Router<PgPool> {
     Router::new()
         .route("/", get(get_games).post(post_games))
         .route("/{id}", get(get_game))
         .route("/{id}/state", get(get_game_state))
+        .route("/{id}/game/start", post(post_game_start))
         .route("/{game_id}/players/{player_id}", get(get_game_player))
 }

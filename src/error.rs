@@ -20,6 +20,9 @@ pub enum AppError {
     #[error("persisted game state is invalid: {message}")]
     InvalidState { message: String },
 
+    #[error("operation invalid for current game status: {message}")]
+    InvalidStatus { message: String },
+
     #[error("repository operation failed")]
     Unexpected {
         #[source]
@@ -43,6 +46,7 @@ impl AppError {
         match self {
             Self::NotFound => (StatusCode::NOT_FOUND, "game was not found"),
             Self::Conflict => (StatusCode::CONFLICT, "game was modified concurrently"),
+            Self::InvalidStatus { .. } => (StatusCode::BAD_REQUEST, "invalid status"),
             Self::InvalidData { .. } | Self::InvalidState { .. } | Self::Unexpected { .. } => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
             }

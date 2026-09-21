@@ -2,6 +2,7 @@ use crate::error::AppError;
 use crate::game::game_state::GameState;
 use crate::game::rules;
 use serde::{Deserialize, Serialize};
+use std::fmt::format;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -67,6 +68,11 @@ impl std::str::FromStr for GameStatus {
         }
     }
 }
+impl std::fmt::Display for GameStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 #[derive(Clone)]
 pub struct Player {
@@ -104,6 +110,20 @@ impl Game {
         })
     }
     pub(crate) fn start(&mut self) -> Result<(), AppError> {
+        if self.status != GameStatus::Open {
+            return Err(AppError::InvalidStatus {
+                message: format!("Can't start a {} game", self.status),
+            });
+        }
+        if self.players.len() < 2 {
+            return Err(AppError::InvalidStatus {
+                message: format!(
+                    "Need 2 players to start game, only found {}",
+                    self.players.len()
+                ),
+            });
+        }
+
         let playerIds: Vec<PlayerId> = self.players.iter().map(|p| p.id).collect();
         self.state = Some(rules::initial_state(&playerIds)?);
         self.status = GameStatus::Running;
@@ -114,11 +134,11 @@ impl Game {
         status: GameStatus,
         host: PlayerId,
         players: Vec<Player>,
-        state: GameState,
+        state: Option<GameState>,
         max_players: u8,
         created_at: OffsetDateTime,
     ) -> Result<Self, AppError> {
-        if status == GameStatus::Running && !state.is_initialized() {
+        if status == GameStatus::Running && !state.as_ref().is_some_and(|s| s.is_initialized()) {
             return Err(AppError::InvalidState {
                 message: "Game is running, but state is not initialized".to_owned(),
             });
@@ -139,7 +159,7 @@ impl Game {
             status,
             host,
             players,
-            state: Some(state),
+            state,
             max_players,
             created_at,
         })

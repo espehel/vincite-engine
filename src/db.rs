@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::game::game::{Game, GameId, Player, PlayerId};
 use sqlx::postgres::PgPoolOptions;
-use sqlx::{PgPool, query_as};
+use sqlx::{PgPool, query, query_as};
 use std::collections::HashMap;
 use std::time::Duration;
 use uuid::Uuid;
@@ -56,7 +56,7 @@ fn build_game(row: GameRow, player_rows: Vec<GamePlayerRow>) -> Result<Game, App
         row.status.parse()?,
         host,
         players,
-        serde_json::from_value(row.state).map_err(AppError::invalid_data)?,
+        serde_json::from_value(row.state).ok(),
         u8::try_from(row.maximum_players).map_err(AppError::invalid_data)?,
         row.created_at,
     )
@@ -261,4 +261,48 @@ pub(crate) async fn find_game_player(
     .ok_or(AppError::NotFound)?;
 
     Ok(row.into())
+}
+
+pub(crate) async fn start_game(pool: &PgPool, game_id: GameId) -> Result<Game, AppError> {
+    let mut tx = pool.begin().await?;
+
+    let game_row = query_as!(
+        GameRow,
+        r#"SELECT id, status, state, maximum_players, created_at
+           FROM games WHERE id = $1
+           FOR UPDATE "#,
+        game_id.to_uuid()
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    let player_rows = query_as!(
+        GamePlayerRow,
+        r#"
+        SELECT gp.game_id, p.id, p.name, gp.is_host
+        FROM game_players gp
+        JOIN players p ON p.id = gp.player_id
+        WHERE gp.game_id = $1
+        ORDER BY p.name
+        "#,
+        game_id.to_uuid()
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let mut game = build_game(game_row, player_rows)?;
+    game.start()?;
+
+    query!(
+        r#"UPDATE games SET status = $2, state = $3 WHERE id = $1"#,
+        game_id.to_uuid(),
+        game.status.as_str(),
+        serde_json::to_value(game.persisted_state()).map_err(AppError::unexpected)?
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(game)
 }
