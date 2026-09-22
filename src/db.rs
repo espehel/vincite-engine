@@ -138,7 +138,9 @@ pub(crate) async fn find_game(pool: &PgPool, id: GameId) -> Result<Game, AppErro
     )
     .fetch_optional(pool)
     .await?
-    .ok_or(AppError::NotFound)?;
+    .ok_or(AppError::NotFound {
+        message: "game not found".to_string(),
+    })?;
 
     let player_rows = query_as!(
         GamePlayerRow,
@@ -207,7 +209,7 @@ pub(crate) async fn insert_game(pool: &PgPool, game: &Game) -> Result<(), AppErr
 }
 
 pub(crate) async fn insert_player(pool: &PgPool, player: &Player) -> Result<(), AppError> {
-    sqlx::query!(
+    query!(
         r#"
         INSERT INTO players (id, name)
         VALUES ($1, $2)
@@ -233,7 +235,9 @@ pub(crate) async fn find_player(pool: &PgPool, player_id: PlayerId) -> Result<Pl
     )
     .fetch_optional(pool)
     .await?
-    .ok_or(AppError::NotFound)?;
+    .ok_or(AppError::NotFound {
+        message: "Player not found".to_string(),
+    })?;
 
     Ok(row.into())
 }
@@ -258,9 +262,46 @@ pub(crate) async fn find_game_player(
     )
     .fetch_optional(pool)
     .await?
-    .ok_or(AppError::NotFound)?;
+    .ok_or(AppError::NotFound {
+        message: "Player does not exist".to_string(),
+    })?;
 
     Ok(row.into())
+}
+
+pub(crate) async fn insert_game_player(
+    pool: &PgPool,
+    game_id: GameId,
+    player_id: PlayerId,
+) -> Result<(), AppError> {
+    query!(
+        r#"
+        INSERT INTO game_players (game_id, player_id, is_host)
+        VALUES ($1, $2, $3)
+        "#,
+        game_id.to_uuid(),
+        player_id.to_uuid(),
+        false
+    )
+    .execute(pool)
+    .await
+    .map_err(|err| {
+        if let sqlx::Error::Database(db_err) = &err {
+            if db_err.is_foreign_key_violation() {
+                let message = match db_err.constraint() {
+                    Some("game_players_game_id_fkey") => "game_id does not exist",
+                    Some("game_players_player_id_fkey") => "player_id does not exist",
+                    _ => "referenced resource does not exist",
+                };
+                return AppError::NotFound {
+                    message: message.to_owned(),
+                };
+            }
+        }
+        AppError::from(err)
+    })?;
+
+    Ok(())
 }
 
 pub(crate) async fn start_game(pool: &PgPool, game_id: GameId) -> Result<Game, AppError> {
@@ -275,7 +316,9 @@ pub(crate) async fn start_game(pool: &PgPool, game_id: GameId) -> Result<Game, A
     )
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or(AppError::NotFound)?;
+    .ok_or(AppError::NotFound {
+        message: "Game not found".to_owned(),
+    })?;
 
     let player_rows = query_as!(
         GamePlayerRow,

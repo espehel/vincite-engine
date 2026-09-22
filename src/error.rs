@@ -8,8 +8,8 @@ type BoxError = Box<dyn Error + Send + Sync>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
-    #[error("game was not found")]
-    NotFound,
+    #[error("resource not found: {message}")]
+    NotFound { message: String },
 
     #[error("game was modified concurrently")]
     Conflict,
@@ -42,21 +42,21 @@ impl AppError {
     }
 
     /// The status code and the message the client is allowed to see.
-    fn public(&self) -> (StatusCode, &'static str) {
+    fn public(&self) -> (StatusCode, &str) {
         match self {
-            Self::NotFound => (StatusCode::NOT_FOUND, "game was not found"),
+            Self::NotFound { message } => (StatusCode::NOT_FOUND, message),
             Self::Conflict => (StatusCode::CONFLICT, "game was modified concurrently"),
-            Self::InvalidStatus { .. } => (StatusCode::BAD_REQUEST, "invalid status"),
-            Self::InvalidData { .. } | Self::InvalidState { .. } | Self::Unexpected { .. } => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
-            }
+            Self::InvalidStatus { message } => (StatusCode::BAD_REQUEST, message),
+            Self::InvalidState { message } => (StatusCode::BAD_REQUEST, message),
+            Self::InvalidData { message } => (StatusCode::BAD_REQUEST, message),
+            Self::Unexpected { .. } => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
         }
     }
 }
 
 #[derive(Serialize)]
-struct ErrorBody {
-    error: &'static str,
+struct ErrorBody<'a> {
+    error: &'a str,
 }
 
 // lets `?` convert
