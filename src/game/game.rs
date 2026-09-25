@@ -109,6 +109,26 @@ impl Game {
             created_at: OffsetDateTime::now_utc(),
         })
     }
+    pub(crate) fn join(&mut self, player: Player) -> Result<(), AppError> {
+        if self.status != GameStatus::Open {
+            return Err(AppError::InvalidStatus {
+                message: format!("Can't join a {} game", self.status),
+            });
+        }
+        if self.players.iter().any(|p| p.id == player.id) {
+            return Err(AppError::RuleViolation {
+                message: "Player has already joined this game".to_owned(),
+            });
+        }
+        if self.players.len() >= usize::from(self.max_players) {
+            return Err(AppError::RuleViolation {
+                message: format!("Game is full ({} players)", self.max_players),
+            });
+        }
+
+        self.players.push(player);
+        Ok(())
+    }
     pub(crate) fn start(&mut self) -> Result<(), AppError> {
         if self.status != GameStatus::Open {
             return Err(AppError::InvalidStatus {

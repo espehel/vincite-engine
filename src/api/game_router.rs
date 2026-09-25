@@ -58,13 +58,13 @@ async fn get_game_state(
     Ok(Json(game_state))
 }
 
-async fn post_game_players(
+async fn post_game_player(
     State(pool): State<PgPool>,
     Path((game_id, player_id)): Path<(GameId, PlayerId)>,
-) -> ApiPostResult<()> {
-    db::insert_game_player(&pool, game_id, player_id).await?;
+) -> ApiPostResult<GameDto> {
+    let game = db::join_game(&pool, game_id, player_id).await?;
 
-    Ok((StatusCode::CREATED, Json(())))
+    Ok((StatusCode::CREATED, Json(game.into())))
 }
 
 async fn get_game_player(
@@ -90,7 +90,9 @@ pub(crate) fn create_game_router() -> Router<PgPool> {
         .route("/", get(get_games).post(post_games))
         .route("/{id}", get(get_game))
         .route("/{id}/state", get(get_game_state))
-        .route("/{id}/game/start", post(post_game_start))
-        .route("/{id}/game/players", post(post_game_players))
-        .route("/{game_id}/players/{player_id}", get(get_game_player))
+        .route("/{id}/start", post(post_game_start))
+        .route(
+            "/{game_id}/players/{player_id}",
+            get(get_game_player).post(post_game_player),
+        )
 }

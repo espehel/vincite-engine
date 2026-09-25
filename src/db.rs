@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::game::game::{Game, GameId, Player, PlayerId};
 use sqlx::postgres::PgPoolOptions;
-use sqlx::{PgPool, query, query_as};
+use sqlx::{PgConnection, PgExecutor, PgPool, query, query_as};
 use std::collections::HashMap;
 use std::time::Duration;
 use uuid::Uuid;
@@ -142,7 +142,16 @@ pub(crate) async fn find_game(pool: &PgPool, id: GameId) -> Result<Game, AppErro
         message: "game not found".to_string(),
     })?;
 
-    let player_rows = query_as!(
+    let player_rows = fetch_roster(pool, id).await?;
+
+    build_game(game_row, player_rows)
+}
+
+async fn fetch_roster(
+    executor: impl PgExecutor<'_>,
+    game_id: GameId,
+) -> Result<Vec<GamePlayerRow>, AppError> {
+    let rows = query_as!(
         GamePlayerRow,
         r#"
         SELECT gp.game_id, p.id, p.name, gp.is_host
@@ -151,12 +160,48 @@ pub(crate) async fn find_game(pool: &PgPool, id: GameId) -> Result<Game, AppErro
         WHERE gp.game_id = $1
         ORDER BY p.name
         "#,
-        id.to_uuid()
+        game_id.to_uuid()
     )
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await?;
 
+    Ok(rows)
+}
+
+/// Loads a game and locks its row until the surrounding transaction ends, so
+/// every command against the same game runs one at a time.
+async fn lock_game(conn: &mut PgConnection, game_id: GameId) -> Result<Game, AppError> {
+    let game_row = query_as!(
+        GameRow,
+        r#"SELECT id, status, state, maximum_players, created_at
+           FROM games WHERE id = $1
+           FOR UPDATE "#,
+        game_id.to_uuid()
+    )
+    .fetch_optional(&mut *conn)
+    .await?
+    .ok_or(AppError::NotFound {
+        message: "Game not found".to_owned(),
+    })?;
+
+    let player_rows = fetch_roster(&mut *conn, game_id).await?;
+
     build_game(game_row, player_rows)
+}
+
+/// Writes back the parts of a game a command can change. The roster lives in
+/// `game_players` and is written by the command that changes it.
+async fn update_game(conn: &mut PgConnection, game: &Game) -> Result<(), AppError> {
+    query!(
+        r#"UPDATE games SET status = $2, state = $3 WHERE id = $1"#,
+        game.id.to_uuid(),
+        game.status.as_str(),
+        serde_json::to_value(game.persisted_state()).map_err(AppError::unexpected)?
+    )
+    .execute(conn)
+    .await?;
+
+    Ok(())
 }
 
 pub(crate) async fn insert_game(pool: &PgPool, game: &Game) -> Result<(), AppError> {
@@ -223,7 +268,10 @@ pub(crate) async fn insert_player(pool: &PgPool, player: &Player) -> Result<(), 
     Ok(())
 }
 
-pub(crate) async fn find_player(pool: &PgPool, player_id: PlayerId) -> Result<Player, AppError> {
+pub(crate) async fn find_player(
+    executor: impl PgExecutor<'_>,
+    player_id: PlayerId,
+) -> Result<Player, AppError> {
     let row = query_as!(
         PlayerRow,
         r#"
@@ -233,7 +281,7 @@ pub(crate) async fn find_player(pool: &PgPool, player_id: PlayerId) -> Result<Pl
         "#,
         player_id.to_uuid()
     )
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await?
     .ok_or(AppError::NotFound {
         message: "Player not found".to_string(),
@@ -269,82 +317,38 @@ pub(crate) async fn find_game_player(
     Ok(row.into())
 }
 
-pub(crate) async fn insert_game_player(
+pub(crate) async fn join_game(
     pool: &PgPool,
     game_id: GameId,
     player_id: PlayerId,
-) -> Result<(), AppError> {
+) -> Result<Game, AppError> {
+    let mut tx = pool.begin().await?;
+
+    let mut game = lock_game(&mut tx, game_id).await?;
+    let player = find_player(&mut *tx, player_id).await?;
+    game.join(player)?;
+
     query!(
         r#"
         INSERT INTO game_players (game_id, player_id, is_host)
-        VALUES ($1, $2, $3)
+        VALUES ($1, $2, FALSE)
         "#,
         game_id.to_uuid(),
         player_id.to_uuid(),
-        false
     )
-    .execute(pool)
-    .await
-    .map_err(|err| {
-        if let sqlx::Error::Database(db_err) = &err {
-            if db_err.is_foreign_key_violation() {
-                let message = match db_err.constraint() {
-                    Some("game_players_game_id_fkey") => "game_id does not exist",
-                    Some("game_players_player_id_fkey") => "player_id does not exist",
-                    _ => "referenced resource does not exist",
-                };
-                return AppError::NotFound {
-                    message: message.to_owned(),
-                };
-            }
-        }
-        AppError::from(err)
-    })?;
+    .execute(&mut *tx)
+    .await?;
 
-    Ok(())
+    tx.commit().await?;
+    Ok(game)
 }
 
 pub(crate) async fn start_game(pool: &PgPool, game_id: GameId) -> Result<Game, AppError> {
     let mut tx = pool.begin().await?;
 
-    let game_row = query_as!(
-        GameRow,
-        r#"SELECT id, status, state, maximum_players, created_at
-           FROM games WHERE id = $1
-           FOR UPDATE "#,
-        game_id.to_uuid()
-    )
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(AppError::NotFound {
-        message: "Game not found".to_owned(),
-    })?;
-
-    let player_rows = query_as!(
-        GamePlayerRow,
-        r#"
-        SELECT gp.game_id, p.id, p.name, gp.is_host
-        FROM game_players gp
-        JOIN players p ON p.id = gp.player_id
-        WHERE gp.game_id = $1
-        ORDER BY p.name
-        "#,
-        game_id.to_uuid()
-    )
-    .fetch_all(&mut *tx)
-    .await?;
-
-    let mut game = build_game(game_row, player_rows)?;
+    let mut game = lock_game(&mut tx, game_id).await?;
     game.start()?;
-
-    query!(
-        r#"UPDATE games SET status = $2, state = $3 WHERE id = $1"#,
-        game_id.to_uuid(),
-        game.status.as_str(),
-        serde_json::to_value(game.persisted_state()).map_err(AppError::unexpected)?
-    )
-    .execute(&mut *tx)
-    .await?;
+    update_game(&mut tx, &game).await?;
 
     tx.commit().await?;
     Ok(game)
