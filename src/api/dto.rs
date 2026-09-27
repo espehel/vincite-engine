@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use crate::game::command::GameCommand;
 use crate::game::game::{Game, GameId, GameStatus, Player, PlayerId};
 use axum::Json;
 use axum::http::StatusCode;
@@ -46,9 +47,8 @@ impl From<Player> for PlayerDto {
 }
 
 #[derive(serde::Deserialize)]
-pub struct CreateCommandRequest {
-    pub kind: String,
-    pub payload: String,
+pub struct PostCommandRequest {
+    command: Json<GameCommand>,
 }
 
 #[derive(serde::Serialize)]

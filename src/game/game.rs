@@ -1,4 +1,6 @@
 use crate::error::AppError;
+use crate::game::command::GameCommand;
+use crate::game::event::GameEvent;
 use crate::game::game_state::GameState;
 use crate::game::rules;
 use serde::{Deserialize, Serialize};
@@ -145,8 +147,8 @@ impl Game {
             });
         }
 
-        let playerIds: Vec<PlayerId> = self.players.iter().map(|p| p.id).collect();
-        self.state = Some(rules::initial_state(&playerIds)?);
+        let player_ids: Vec<PlayerId> = self.players.iter().map(|p| p.id).collect();
+        self.state = Some(rules::initial_state(&player_ids)?);
         self.status = GameStatus::Running;
         self.started_at = Some(OffsetDateTime::now_utc());
         Ok(())
@@ -201,5 +203,11 @@ impl Game {
     /// Persistence only — writes the state at whatever tick it holds.
     pub(crate) fn persisted_state(&self) -> Option<&GameState> {
         self.state.as_ref()
+    }
+    pub(crate) fn apply_command(
+        &mut self,
+        player_id: PlayerId,
+        command: GameCommand,
+    ) -> Result<GameEvent, AppError> {
     }
 }

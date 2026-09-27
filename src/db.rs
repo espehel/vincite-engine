@@ -79,12 +79,6 @@ impl From<PlayerRow> for Player {
     }
 }
 
-#[derive(sqlx::FromRow)]
-pub(crate) struct GameEvents {
-    pub id: uuid::Uuid,
-    pub kind: String,
-}
-
 pub(crate) async fn find_games(pool: &PgPool) -> Result<Vec<Game>, AppError> {
     let game_rows = query_as!(
         GameRow,

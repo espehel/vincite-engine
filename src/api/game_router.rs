@@ -1,7 +1,8 @@
 use crate::api::dto::{
-    ApiPostResult, ApiResult, CreateCommandRequest, CreateGameRequest, EventDto, GameDto, PlayerDto,
+    ApiPostResult, ApiResult, CreateGameRequest, EventDto, GameDto, PlayerDto, PostCommandRequest,
 };
 use crate::db;
+use crate::game::command::GameCommand;
 use crate::game::game::{Game, GameId, PlayerId};
 use crate::game::game_state::GameState;
 use axum::extract::{Path, Query, State};
@@ -89,9 +90,12 @@ async fn post_game_start(
 
 async fn post_game_player_commands(
     State(pool): State<PgPool>,
-    Json(request): Json<CreateCommandRequest>,
+    Json(request): Json<PostCommandRequest>,
     Path((game_id, player_id)): Path<(GameId, PlayerId)>,
 ) -> ApiPostResult<EventDto> {
+    let mut game = db::find_game(&pool, game_id).await?;
+    game.state_at(OffsetDateTime::now_utc()).await?;
+    game.apply_command(player_id, GameCommand::from(request.command.into()))
 }
 
 pub(crate) fn create_game_router() -> Router<PgPool> {

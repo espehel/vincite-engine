@@ -88,7 +88,6 @@ pub struct Settlement {
     pub name: String,
     pub stock: Resources,
     pub building_levels: BTreeMap<Building, u8>,
-    pub construction_queue: Vec<Construction>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
