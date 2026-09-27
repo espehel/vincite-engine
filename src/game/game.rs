@@ -2,7 +2,6 @@ use crate::error::AppError;
 use crate::game::game_state::GameState;
 use crate::game::rules;
 use serde::{Deserialize, Serialize};
-use std::fmt::format;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -96,6 +95,7 @@ pub struct Game {
     state: Option<GameState>,
     pub(crate) max_players: u8,
     pub(crate) created_at: OffsetDateTime,
+    pub(crate) started_at: Option<OffsetDateTime>,
 }
 impl Game {
     pub(crate) fn initiate(max_players: u8, host: Player) -> Result<Self, AppError> {
@@ -107,6 +107,7 @@ impl Game {
             state: None,
             max_players,
             created_at: OffsetDateTime::now_utc(),
+            started_at: None,
         })
     }
     pub(crate) fn join(&mut self, player: Player) -> Result<(), AppError> {
@@ -147,6 +148,7 @@ impl Game {
         let playerIds: Vec<PlayerId> = self.players.iter().map(|p| p.id).collect();
         self.state = Some(rules::initial_state(&playerIds)?);
         self.status = GameStatus::Running;
+        self.started_at = Some(OffsetDateTime::now_utc());
         Ok(())
     }
     pub(crate) fn restore(
@@ -157,6 +159,7 @@ impl Game {
         state: Option<GameState>,
         max_players: u8,
         created_at: OffsetDateTime,
+        started_at: Option<OffsetDateTime>,
     ) -> Result<Self, AppError> {
         if status == GameStatus::Running && !state.as_ref().is_some_and(|s| s.is_initialized()) {
             return Err(AppError::InvalidState {
@@ -182,6 +185,7 @@ impl Game {
             state,
             max_players,
             created_at,
+            started_at,
         })
     }
     /// The only way to read state.

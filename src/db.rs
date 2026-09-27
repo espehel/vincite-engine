@@ -4,6 +4,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgConnection, PgExecutor, PgPool, query, query_as};
 use std::collections::HashMap;
 use std::time::Duration;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 pub(crate) async fn establish_connection(db_url: &str) -> anyhow::Result<PgPool> {
@@ -23,7 +24,8 @@ pub(crate) struct GameRow {
     pub status: String,
     pub state: serde_json::Value,
     pub maximum_players: i16,
-    pub created_at: time::OffsetDateTime,
+    pub created_at: OffsetDateTime,
+    pub started_at: Option<OffsetDateTime>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -59,6 +61,7 @@ fn build_game(row: GameRow, player_rows: Vec<GamePlayerRow>) -> Result<Game, App
         serde_json::from_value(row.state).ok(),
         u8::try_from(row.maximum_players).map_err(AppError::invalid_data)?,
         row.created_at,
+        row.started_at,
     )
 }
 
@@ -86,7 +89,7 @@ pub(crate) async fn find_games(pool: &PgPool) -> Result<Vec<Game>, AppError> {
     let game_rows = query_as!(
         GameRow,
         r#"
-        SELECT id, status, state, maximum_players, created_at
+        SELECT id, status, state, maximum_players, created_at, started_at
         FROM games
         "#
     )
@@ -130,7 +133,7 @@ pub(crate) async fn find_game(pool: &PgPool, id: GameId) -> Result<Game, AppErro
     let game_row = query_as!(
         GameRow,
         r#"
-        SELECT id, status, state, maximum_players, created_at
+        SELECT id, status, state, maximum_players, created_at, started_at
         FROM games
         WHERE id = $1
         "#,
@@ -173,7 +176,7 @@ async fn fetch_roster(
 async fn lock_game(conn: &mut PgConnection, game_id: GameId) -> Result<Game, AppError> {
     let game_row = query_as!(
         GameRow,
-        r#"SELECT id, status, state, maximum_players, created_at
+        r#"SELECT id, status, state, maximum_players, created_at, started_at
            FROM games WHERE id = $1
            FOR UPDATE "#,
         game_id.to_uuid()
@@ -193,10 +196,11 @@ async fn lock_game(conn: &mut PgConnection, game_id: GameId) -> Result<Game, App
 /// `game_players` and is written by the command that changes it.
 async fn update_game(conn: &mut PgConnection, game: &Game) -> Result<(), AppError> {
     query!(
-        r#"UPDATE games SET status = $2, state = $3 WHERE id = $1"#,
+        r#"UPDATE games SET status = $2, state = $3, started_at = $4 WHERE id = $1"#,
         game.id.to_uuid(),
         game.status.as_str(),
-        serde_json::to_value(game.persisted_state()).map_err(AppError::unexpected)?
+        serde_json::to_value(game.persisted_state()).map_err(AppError::unexpected)?,
+        game.started_at
     )
     .execute(conn)
     .await?;
