@@ -1,11 +1,13 @@
 use crate::api::dto::{
-    ApiPostResult, ApiResult, CreateCommandRequest, CreateGameRequest, EventDto, GameDto, PlayerDto,
+    ApiPostResult, ApiResult, CreateGameRequest, EventDto, GameDto, PlayerDto, PostCommandRequest,
 };
-use crate::db;
+use crate::db::queries;
+use crate::db::services::{apply_command, start_game};
+use crate::game::command::GameCommand;
 use crate::game::game::{Game, GameId, PlayerId};
 use crate::game::game_state::GameState;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, request};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -21,9 +23,9 @@ async fn post_games(
     State(pool): State<PgPool>,
     Json(request): Json<CreateGameRequest>,
 ) -> ApiPostResult<GameId> {
-    let host = db::find_player(&pool, request.host).await?;
+    let host = queries::find_player(&pool, request.host).await?;
     let initiated_game = Game::initiate(request.maximum_players, host)?;
-    db::insert_game(&pool, &initiated_game).await?;
+    queries::insert_game(&pool, &initiated_game).await?;
 
     Ok((StatusCode::CREATED, Json(initiated_game.id)))
 }
@@ -31,7 +33,7 @@ async fn get_games(
     State(pool): State<PgPool>,
     Query(filter): Query<GameFilter>,
 ) -> ApiResult<Vec<GameDto>> {
-    let games = db::find_games(&pool).await?;
+    let games = queries::find_games(&pool).await?;
 
     Ok(Json(
         games
@@ -45,7 +47,7 @@ async fn get_games(
 }
 
 async fn get_game(State(pool): State<PgPool>, Path(id): Path<GameId>) -> ApiResult<GameDto> {
-    let game = db::find_game(&pool, id).await?;
+    let game = queries::find_game(&pool, id).await?;
 
     Ok(Json(game.into()))
 }
@@ -54,7 +56,7 @@ async fn get_game_state(
     State(pool): State<PgPool>,
     Path(id): Path<GameId>,
 ) -> ApiResult<GameState> {
-    let mut game = db::find_game(&pool, id).await?;
+    let mut game = queries::find_game(&pool, id).await?;
     let game_state = game.state_at(OffsetDateTime::now_utc())?.clone();
 
     Ok(Json(game_state))
@@ -64,7 +66,7 @@ async fn post_game_player(
     State(pool): State<PgPool>,
     Path((game_id, player_id)): Path<(GameId, PlayerId)>,
 ) -> ApiPostResult<GameDto> {
-    let game = db::join_game(&pool, game_id, player_id).await?;
+    let game = queries::join_game(&pool, game_id, player_id).await?;
 
     Ok((StatusCode::CREATED, Json(game.into())))
 }
@@ -73,7 +75,7 @@ async fn get_game_player(
     State(pool): State<PgPool>,
     Path((game_id, player_id)): Path<(GameId, PlayerId)>,
 ) -> ApiResult<PlayerDto> {
-    let player = db::find_game_player(&pool, game_id, player_id).await?;
+    let player = queries::find_game_player(&pool, game_id, player_id).await?;
 
     Ok(Json(player.into()))
 }
@@ -82,16 +84,23 @@ async fn post_game_start(
     State(pool): State<PgPool>,
     Path(id): Path<GameId>,
 ) -> ApiPostResult<GameDto> {
-    let game = db::start_game(&pool, id).await?;
+    let game = start_game(&pool, id).await?;
 
     Ok((StatusCode::OK, Json(game.into())))
 }
 
-async fn post_game_player_commands(
+async fn post_game_commands(
     State(pool): State<PgPool>,
-    Json(request): Json<CreateCommandRequest>,
-    Path((game_id, player_id)): Path<(GameId, PlayerId)>,
+    Json(request): Json<PostCommandRequest>,
+    Path((game_id)): Path<GameId>,
 ) -> ApiPostResult<EventDto> {
+    let event = apply_command(
+        &pool,
+        game_id,
+        request.player_id,
+        GameCommand::from(request.command.into()),
+    )?;
+    Ok((StatusCode::CREATED, Json(event.into())))
 }
 
 pub(crate) fn create_game_router() -> Router<PgPool> {
@@ -104,4 +113,5 @@ pub(crate) fn create_game_router() -> Router<PgPool> {
             "/{game_id}/players/{player_id}",
             get(get_game_player).post(post_game_player),
         )
+        .route("/{game_id}/commands", get(post_game_commands))
 }

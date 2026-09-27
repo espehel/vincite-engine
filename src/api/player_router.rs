@@ -1,6 +1,6 @@
 use crate::api::dto::{ApiPostResult, ApiResult, CreatePlayerRequest, PlayerDto};
-use crate::db;
 use crate::game::game::{Player, PlayerId};
+use crate::queries;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
@@ -12,13 +12,13 @@ async fn post_players(
     Json(request): Json<CreatePlayerRequest>,
 ) -> ApiPostResult<PlayerId> {
     let new_player = Player::new(request.name);
-    db::insert_player(&pool, &new_player).await?;
+    queries::insert_player(&pool, &new_player).await?;
 
     Ok((StatusCode::CREATED, Json(new_player.id)))
 }
 
 async fn get_player(State(pool): State<PgPool>, Path(id): Path<PlayerId>) -> ApiResult<PlayerDto> {
-    let player = db::find_player(&pool, id).await?;
+    let player = queries::find_player(&pool, id).await?;
 
     Ok(Json(player.into()))
 }

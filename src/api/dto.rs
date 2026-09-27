@@ -1,4 +1,6 @@
 use crate::error::AppError;
+use crate::game::command::GameCommand;
+use crate::game::event::GameEvent;
 use crate::game::game::{Game, GameId, GameStatus, Player, PlayerId};
 use axum::Json;
 use axum::http::StatusCode;
@@ -46,9 +48,9 @@ impl From<Player> for PlayerDto {
 }
 
 #[derive(serde::Deserialize)]
-pub struct CreateCommandRequest {
-    pub kind: String,
-    pub payload: String,
+pub struct PostCommandRequest {
+    pub command: Json<GameCommand>,
+    pub player_id: PlayerId,
 }
 
 #[derive(serde::Serialize)]
@@ -58,11 +60,26 @@ pub struct EventDto {
     pub command_id: usize,
     pub kind: String,
     pub payload: String,
-    due_tick: usize,
+    pub due_tick: usize,
     #[serde(with = "time::serde::rfc3339")]
-    due_at: OffsetDateTime,
+    pub due_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339::option")]
-    processed_at: Option<OffsetDateTime>,
+    pub processed_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
-    created_at: OffsetDateTime,
+    pub created_at: OffsetDateTime,
+}
+impl From<GameEvent> for EventDto {
+    fn from(event: GameEvent) -> Self {
+        Self {
+            id: event.id,
+            game_id: event.game_id,
+            command_id: event.command_id,
+            kind: event.kind,
+            payload: event.payload,
+            due_tick: event.due_tick,
+            due_at: event.due_at,
+            processed_at: event.processed_at,
+            created_at: event.created_at,
+        }
+    }
 }

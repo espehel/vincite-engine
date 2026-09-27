@@ -5,7 +5,7 @@ mod game;
 
 use crate::api::{create_game_router, create_player_router};
 
-use crate::db::establish_connection;
+use crate::db::connection::establish_connection;
 use axum::Router;
 
 #[tokio::main]

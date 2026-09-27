@@ -26,6 +26,9 @@ pub enum AppError {
     #[error("game rule violated: {message}")]
     RuleViolation { message: String },
 
+    #[error("game command invalid: {message}")]
+    InvalidCommand { message: String },
+
     #[error("repository operation failed")]
     Unexpected {
         #[source]
@@ -53,6 +56,7 @@ impl AppError {
             Self::RuleViolation { message } => (StatusCode::CONFLICT, message),
             Self::InvalidState { message } => (StatusCode::BAD_REQUEST, message),
             Self::InvalidData { message } => (StatusCode::BAD_REQUEST, message),
+            Self::InvalidCommand { message } => (StatusCode::BAD_REQUEST, message),
             Self::Unexpected { .. } => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
         }
     }

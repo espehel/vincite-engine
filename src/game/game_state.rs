@@ -13,13 +13,6 @@ pub enum Building {
     Barracks,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Construction {
-    pub building: Building,
-    pub to_level: u8,
-    pub completes_at_tick: u64,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Resource {
@@ -67,6 +60,14 @@ impl Resources {
             grain: self.grain.saturating_add(other.grain),
         }
     }
+    pub fn subtract(self, other: Self) -> Self {
+        Self {
+            wood: self.wood.saturating_sub(other.wood),
+            clay: self.clay.saturating_sub(other.clay),
+            iron: self.iron.saturating_sub(other.iron),
+            grain: self.grain.saturating_sub(other.grain),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -88,7 +89,6 @@ pub struct Settlement {
     pub name: String,
     pub stock: Resources,
     pub building_levels: BTreeMap<Building, u8>,
-    pub construction_queue: Vec<Construction>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
