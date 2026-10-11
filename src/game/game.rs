@@ -227,31 +227,34 @@ impl Game {
 
     /// apply events that are due
     pub(crate) fn advanceTo(&mut self, now: OffsetDateTime)-> Result<Vec<GameEvent>, AppError> {
-        let pending_events = self
+        let state = self.state.as_mut().ok_or(AppError::InvalidState {
+            message: "game has not started".to_owned(),
+        })?;
+
+        let mut pending_events: Vec<_> = self
             .events
             .iter_mut()
             .filter(|e| e.processed_at.is_none())
             .filter(|e| e.due_at <= now)
             .collect();
 
-        pending_events.iter().for_each(|event| {
-                self.process_event(event);
-                event.processed_at = Some(now);
-            });
+        pending_events.sort_by_key(|event| (event.due_at, event.id));
 
-        self.state_at(now);
+        let mut processed_events = Vec::with_capacity(pending_events.len());
 
-        pending_events
-    }
+        for event in pending_events {
+            let tick = rules::tick_at(self.created_at, event.due_at);
+            rules::advance_to(state, tick);
 
-    pub(crate) fn process_event(
-        &mut self,
-        &mut event: &mut GameEvent,
-    ) -> Result<GameEvent, AppError> {
-        self.state_at(event.due_at);
-        rules::process_event(self.state.as_mut(), event)
-            event.processed_at
-        Ok(event)
+            rules::process_event(state, event.clone())?;
+
+            event.processed_at = Some(now);
+            processed_events.push(event.clone());
+        }
+
+        rules::advance_to(state, rules::tick_at(self.created_at, now))
+
+        Ok(processed_events)
     }
 
     pub(crate) fn apply_command(

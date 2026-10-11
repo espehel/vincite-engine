@@ -13,6 +13,7 @@ pub(crate) enum GameEventData {
     },
 }
 
+#[derive(Clone)]
 pub(crate) struct GameEvent {
     pub id: i64,
     pub game_id: GameId,

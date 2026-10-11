@@ -68,6 +68,12 @@ impl Resources {
             grain: self.grain.saturating_sub(other.grain),
         }
     }
+    pub fn covers(self, other: Self) -> bool {
+        self.wood >= other.wood
+            && self.clay >= other.clay
+            && self.iron >= other.iron
+            && self.grain >= other.grain
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

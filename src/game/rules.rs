@@ -101,7 +101,11 @@ pub fn upgrade_building(
     building: Building,
     now_tick: u64,
 ) -> Result<ScheduledEvent, AppError> {
-    let currentLevel = settlement.building_levels.get(building)?;
+    let currentLevel = settlement
+        .building_levels
+        .get(&building)
+        .copied()
+        .unwrap_or(0);
 
     if currentLevel == spec(building).max_level {
         return Err(AppError::InvalidCommand {
@@ -113,7 +117,14 @@ pub fn upgrade_building(
         });
     }
 
-    settlement
+    let cost = upgrade_cost(building, currentLevel);
+    if !settlement.stock.covers(cost) {
+        return Err(AppError::InvalidCommand {
+            message: "Not enough resources to upgrade building".into(),
+        });
+    }
+
+    settlement.stock = settlement
         .stock
         .subtract(upgrade_cost(building, currentLevel));
 
@@ -123,7 +134,10 @@ pub fn upgrade_building(
             building,
             to_level: currentLevel.saturating_add(1),
         },
-        due_tick: now_tick.saturating_add(spec(building).base_build_ticks),
+        due_tick: now_tick
+            .saturating_add(spec(building).base_build_ticks)
+            .try_into()
+            .unwrap_or(i64::MAX),
     })
 }
 
@@ -210,12 +224,14 @@ pub(crate) fn execute_command(
     state: &mut GameState,
     command: GameCommand,
 ) -> Result<(Vec<ScheduledEvent>), AppError> {
+    let now_tick = state.tick;
+
     match command {
         GameCommand::UpgradeBuilding {
             building,
             settlement_id,
         } => settlement_mut(state, settlement_id)
-            .and_then(|settlement| upgrade_building(settlement, building, state.tick))
-            .and_then(|e| Ok(vec![e])),
+            .and_then(|settlement| upgrade_building(settlement, building, now_tick))
+            .map(|event| vec![event]),
     }
 }
